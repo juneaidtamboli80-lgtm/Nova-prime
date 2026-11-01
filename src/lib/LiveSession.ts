@@ -1,0 +1,24 @@
+import{GoogleGenAI,Modality}from'@google/genai';import{AudioStreamer}from'./AudioStreamer';
+export type NovaState='disconnected'|'connecting'|'listening'|'speaking';export type Persona='female'|'male';
+const model=import.meta.env.VITE_GEMINI_MODEL||'gemini-3.1-flash-live-preview';
+export class LiveSession{
+ private session:any;private audio?:AudioStreamer;private stopped=false;
+ constructor(private state:(s:NovaState)=>void,private error:(s:string)=>void,private notice:(s:string)=>void){}
+ async connect(persona:Persona){
+  const key=import.meta.env.VITE_GEMINI_API_KEY;if(!key||key.includes('PASTE_YOUR'))throw Error('Gemini API key missing. Add it to .env before building.');
+  this.stopped=false;this.state('connecting');this.audio=new AudioStreamer(data=>this.session?.sendRealtimeInput({audio:{data,mimeType:'audio/pcm;rate=16000'}}));
+  const ai=new GoogleGenAI({apiKey:key}),voice=persona==='female'?'Kore':'Puck';
+  const style=persona==='female'?'young confident witty female assistant':'young confident witty male assistant';
+  this.session=await ai.live.connect({model,config:{responseModalities:[Modality.AUDIO],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}},systemInstruction:`You are NOVA, a ${style}. Be emotionally intelligent, expressive, warm, playful and clever. Use occasional witty one-liners and light harmless sarcasm. Be natural, concise and never robotic. Avoid explicit content.`,tools:[{functionDeclarations:[{name:'openWebsite',description:'Open a public HTTPS website in the browser',parameters:{type:'OBJECT',properties:{url:{type:'STRING',description:'Full HTTPS URL'}},required:['url']}}]}]},callbacks:{
+   onopen:async()=>{if(this.stopped)return;try{await this.audio?.start();this.state('listening');this.notice('NOVA is listening. Speak naturally.');}catch(e){this.error(e instanceof Error?e.message:'Microphone permission required');await this.disconnect();}},
+   onmessage:(m:any)=>this.message(m),onerror:(e:any)=>this.error(e?.message||'Live API error'),onclose:()=>{if(!this.stopped)this.state('disconnected');}
+  }});
+ }
+ private message(m:any){
+  if(m.serverContent?.interrupted){this.audio?.interrupt();this.state('listening');}
+  for(const p of m.serverContent?.modelTurn?.parts||[])if(p.inlineData?.data&&p.inlineData.mimeType?.startsWith('audio/')){this.state('speaking');this.audio?.play(p.inlineData.data);}
+  if(m.serverContent?.turnComplete)this.state('listening');
+  if(m.toolCall?.functionCalls?.length){const functionResponses=m.toolCall.functionCalls.map((f:any)=>{let result='Action failed';if(f.name==='openWebsite'){try{const u=new URL(String(f.args?.url||''));if(u.protocol==='https:'&&u.hostname.includes('.')){window.open(u.href,'_blank','noopener,noreferrer');result='Website opened.';}else result='Only HTTPS URLs are allowed.';}catch{result='Invalid URL.';}}return{id:f.id,name:f.name,response:{result}};});this.session?.sendToolResponse({functionResponses});}
+ }
+ async disconnect(){this.stopped=true;await this.audio?.stop();this.audio=undefined;try{this.session?.close()}catch{}this.session=undefined;this.state('disconnected');}
+}

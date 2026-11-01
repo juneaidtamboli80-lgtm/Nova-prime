@@ -1,0 +1,48 @@
+name: Build NOVA Android APK
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: {node-version: 20, cache: npm}
+      - run: npm install
+      - name: Build web app
+        env:
+          VITE_GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          VITE_GEMINI_MODEL: gemini-3.1-flash-live-preview
+        run: npm run build
+      - run: npx cap add android
+      - run: npx cap sync android
+      - name: Add Android permissions
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          p=Path("android/app/src/main/AndroidManifest.xml")
+          s=p.read_text()
+          perms = [
+            'android.permission.INTERNET','android.permission.RECORD_AUDIO','android.permission.CAMERA',
+            'android.permission.READ_MEDIA_IMAGES','android.permission.READ_MEDIA_VIDEO',
+            'android.permission.READ_EXTERNAL_STORAGE','android.permission.POST_NOTIFICATIONS',
+            'android.permission.READ_CONTACTS','android.permission.ACCESS_COARSE_LOCATION',
+            'android.permission.ACCESS_FINE_LOCATION','android.permission.CALL_PHONE','android.permission.READ_PHONE_STATE'
+          ]
+          block=''.join(f'<uses-permission android:name="{x}" />\\n    ' for x in perms)
+          s=s.replace('<application',block+'<application',1)
+          p.write_text(s)
+          PY
+      - name: Build APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nova-ai-debug-apk
+          path: android/app/build/outputs/apk/debug/app-debug.apk
