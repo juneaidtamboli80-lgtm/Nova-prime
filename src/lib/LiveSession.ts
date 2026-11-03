@@ -1,4 +1,4 @@
-import{GoogleGenAI,Modality}from'@google/genai';import{AudioStreamer}from'./AudioStreamer';
+import{GoogleGenAI,Modality,Type}from'@google/genai';import{AudioStreamer}from'./AudioStreamer';
 export type NovaState='disconnected'|'connecting'|'listening'|'speaking';export type Persona='female'|'male';
 const model=import.meta.env.VITE_GEMINI_MODEL||'gemini-3.1-flash-live-preview';
 export class LiveSession{
@@ -9,7 +9,7 @@ export class LiveSession{
   this.stopped=false;this.state('connecting');this.audio=new AudioStreamer(data=>this.session?.sendRealtimeInput({audio:{data,mimeType:'audio/pcm;rate=16000'}}));
   const ai=new GoogleGenAI({apiKey:key}),voice=persona==='female'?'Kore':'Puck';
   const style=persona==='female'?'young confident witty female assistant':'young confident witty male assistant';
-  this.session=await ai.live.connect({model,config:{responseModalities:[Modality.AUDIO],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}},systemInstruction:`You are NOVA, a ${style}. Be emotionally intelligent, expressive, warm, playful and clever. Use occasional witty one-liners and light harmless sarcasm. Be natural, concise and never robotic. Avoid explicit content.`,tools:[{functionDeclarations:[{name:'openWebsite',description:'Open a public HTTPS website in the browser',parameters:{type:'OBJECT',properties:{url:{type:'STRING',description:'Full HTTPS URL'}},required:['url']}}]}]},callbacks:{
+  this.session=await ai.live.connect({model,config:{responseModalities:[Modality.AUDIO],speechConfig:{voiceConfig:{prebuiltVoiceConfig:{voiceName:voice}}},systemInstruction:`You are NOVA, a ${style}. Be emotionally intelligent, expressive, warm, playful and clever. Use occasional witty one-liners and light harmless sarcasm. Be natural, concise and never robotic. Avoid explicit content.`,tools:[{functionDeclarations:[{name:'openWebsite',description:'Open a public HTTPS website in the browser',parameters:{type:Type.OBJECT,properties:{url:{type:Type.STRING,description:'Full HTTPS URL'}},required:['url']}}]}]},callbacks:{
    onopen:async()=>{if(this.stopped)return;try{await this.audio?.start();this.state('listening');this.notice('NOVA is listening. Speak naturally.');}catch(e){this.error(e instanceof Error?e.message:'Microphone permission required');await this.disconnect();}},
    onmessage:(m:any)=>this.message(m),onerror:(e:any)=>this.error(e?.message||'Live API error'),onclose:()=>{if(!this.stopped)this.state('disconnected');}
   }});
