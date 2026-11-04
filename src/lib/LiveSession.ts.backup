@@ -1,11 +1,11 @@
-import{GoogleGenAI,Modality,Type}from'@google/genai';import{AudioStreamer}from'./AudioStreamer';
+import{GoogleGenAI,Modality,Type}from'@google/genai';import{AudioStreamer}from'./AudioStreamer';import{getKey}from'./keyStore';
 export type NovaState='disconnected'|'connecting'|'listening'|'speaking';export type Persona='female'|'male';
 const model=import.meta.env.VITE_GEMINI_MODEL||'gemini-3.1-flash-live-preview';
 export class LiveSession{
  private session:any;private audio?:AudioStreamer;private stopped=false;
  constructor(private state:(s:NovaState)=>void,private error:(s:string)=>void,private notice:(s:string)=>void){}
  async connect(persona:Persona){
-  const key=import.meta.env.VITE_GEMINI_API_KEY;if(!key||key.includes('PASTE_YOUR'))throw Error('Gemini API key missing. Add it to .env before building.');
+  const key=getKey();if(!key)throw Error('Gemini API key missing. Open Settings → API Key and save your key.');
   this.stopped=false;this.state('connecting');this.audio=new AudioStreamer(data=>this.session?.sendRealtimeInput({audio:{data,mimeType:'audio/pcm;rate=16000'}}));
   const ai=new GoogleGenAI({apiKey:key}),voice=persona==='female'?'Kore':'Puck';
   const style=persona==='female'?'young confident witty female assistant':'young confident witty male assistant';
